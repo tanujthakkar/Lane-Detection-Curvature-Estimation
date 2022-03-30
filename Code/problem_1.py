@@ -28,23 +28,29 @@ class HistogramEqulization:
             histogram: Histogram of input image
         '''
 
-        histogram = np.zeros(256, dtype=int)
+        histograms = np.zeros([3, 256], dtype=int)
         bins = np.arange(256)
 
-        for i in img.flatten():
-            histogram[i] += 1
+        b, g, r = cv2.split(img)
+        img_split = [b.flatten(), g.flatten(), r.flatten()]
+
+        for c, channel in enumerate(img_split):
+            for pix in channel:
+                histograms[c][pix] += 1
 
         plt.figure()
-        plt.title("Grayscale Histogram")
+        plt.title("Histograms")
         plt.xlabel("Pixel Value")
         plt.ylabel("Pixel Count")
         plt.xlim([0, 255])
-        plt.plot(bins, histogram)
+        plt.plot(bins, histograms[0], color='b')
+        plt.plot(bins, histograms[1], color='g')
+        plt.plot(bins, histograms[2], color='r')
         plt.show()
 
-        return histogram
+        return histograms, img_split
 
-    def __compute_cdf(self, histogram: np.array) -> np.array:
+    def __compute_cdf(self, histograms: np.array, img_split: list) -> np.array:
         '''
             Compute cumulative distribution function (CDF) of a histogram
 
@@ -55,32 +61,34 @@ class HistogramEqulization:
             cdf: CDF of input histogram
         '''
 
-        cdf = np.zeros(256, dtype=int)
-        cdf[0] = histogram[0]
+        cdf = np.zeros([3, 256], dtype=int)
+        cdf[:, 0] = histograms[:, 0]
 
-        for _bin in range(1, len(histogram)):
-            cdf[_bin] = histogram[_bin] + cdf[_bin-1]
+        for channel in range(len(histograms)):
+            for _bin in range(1, len(histograms[0])):
+                cdf[channel][_bin] = histograms[channel][_bin] + cdf[channel][_bin-1]
 
         return cdf
 
     def equalize(self) -> np.array:
-        histogram = self.__compute_histogram(self.img_gray)
-        cdf = self.__compute_cdf(histogram)
+        histogram, img_split = self.__compute_histogram(self.img)
+        cdf = self.__compute_cdf(histogram, img_split)
         cdf_min = np.min(cdf[np.nonzero(cdf)])
+        print(cdf_min)
 
-        output = np.zeros(self.img_gray.flatten().shape, dtype=int)
+        # output = np.zeros(self.img_gray.flatten().shape, dtype=int)
 
-        h, w = self.img_gray.shape
+        # h, w = self.img_gray.shape
 
-        for i, pixel in enumerate(self.img_gray.flatten()):
-            output[i] = ((cdf[pixel] - cdf_min)/((h*w) - cdf_min)) * 255
+        # for i, pixel in enumerate(self.img_gray.flatten()):
+        #     output[i] = ((cdf[pixel] - cdf_min)/((h*w) - cdf_min)) * 255
 
-        output = output.reshape(self.img_gray.shape)
-        print(output.shape)
+        # output = output.reshape(self.img_gray.shape)
+        # print(output.shape)
 
-        self.output = output
+        # self.output = output
 
-        return output
+        # return output
 
     def visualize(self) -> None:
         cv2.imshow("Image", self.img)

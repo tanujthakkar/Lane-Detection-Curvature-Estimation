@@ -35,20 +35,54 @@ class LaneDetector:
 
         return roi
 
+    def __classify_lanes(self, frame: np.array, lanes: list) -> list:
+
+        longest = -np.inf
+        gradient = None
+        for lane in lanes:
+            for x1, y1, x2, y2 in lane:
+                dist = np.sqrt((y2-y1)**2 + (x2-x1)**2)
+                if(dist >= longest):
+                    longest = dist
+                    gradient = (y2-y1)/(x2-x1)
+
+        for lane in lanes:
+            for x1, y1, x2, y2 in lane:
+                if(((y2-y1)/(x2-x1) > 0 and gradient > 0) or ((y2-y1)/(x2-x1) < 0 and gradient < 0)):
+                    cv2.line(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+                else:
+                    cv2.line(frame, (x1, y1), (x2, y2), (0,0,255), 2)
+
+    def __draw_lanes(self, frame: np.array, lanes: list) -> None:
+        for lane in lanes:
+            for x1, y1, x2, y2 in lane:
+                cv2.line(frame, (x1, y1), (x2, y2), (0,0,255), 2)
+                cv2.imshow("", frame)
+                cv2.waitKey()
+
     def __detect_lines(self, frame: np.array) -> np.array:
 
+        frame = np.flip(frame, axis=1)
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame_blur = cv2.GaussianBlur(frame_gray, (5, 5), 0)
-        frame_canny = cv2.Canny(frame_blur, 50, 150)
+        frame_canny = cv2.Canny(frame_blur, 75, 150)
 
         corners = np.array([[125, frame_gray.shape[0]],
                             [895, frame_gray.shape[0]],
                             [520, 320],
-                            [440, 320]])
+                            [440, 320]]) # Corners of the region of interest
         frame_roi = self.__mask_roi(frame_canny, corners)
 
-        cv2.imshow("Frame - Canny", frame_roi)
-        cv2.waitKey()
+        lanes = cv2.HoughLinesP(frame_roi, 2, np.pi/180, 20, np.array([]), minLineLength=25, maxLineGap=10)
+        frame_lanes = np.copy(frame)
+        cv2.putText(frame_lanes, 'Solid', (20,20), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(frame_lanes, 'Dashed', (20,40), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 255), 2, cv2.LINE_AA)
+
+        self.__classify_lanes(frame_lanes, lanes)
+        # self.__draw_lanes(frame_lanes, lanes)
+
+        cv2.imshow("Result", np.hstack((convert_three_channel(frame_roi), frame_lanes)))
+        cv2.waitKey(3)
 
 
     def process_video(self) -> None:
@@ -56,9 +90,12 @@ class LaneDetector:
         ret = True
 
         while(ret):
-            ret, frame = video.read()
-
-            self.__detect_lines(frame)
+            try:
+                ret, frame = video.read()
+                self.__detect_lines(frame)
+            except Exception as e:
+                # print("Exception: ", e)
+                pass
 
 
 def main():

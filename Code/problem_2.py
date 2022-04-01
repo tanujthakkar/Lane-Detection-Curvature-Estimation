@@ -21,8 +21,6 @@ import argparse
 
 from utils import *
 
-
-
 class LaneDetector:
 
     def __init__(self, video_path: str) -> None:
@@ -62,7 +60,7 @@ class LaneDetector:
 
     def __detect_lines(self, frame: np.array) -> np.array:
 
-        frame = np.flip(frame, axis=1)
+        # frame = np.flip(frame, axis=1)
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame_blur = cv2.GaussianBlur(frame_gray, (5, 5), 0)
         frame_canny = cv2.Canny(frame_blur, 75, 150)
@@ -79,24 +77,32 @@ class LaneDetector:
         cv2.putText(frame_lanes, 'Dashed', (20,40), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 255), 2, cv2.LINE_AA)
 
         self.__classify_lanes(frame_lanes, lanes)
-        # self.__draw_lanes(frame_lanes, lanes)
 
-        cv2.imshow("Result", np.hstack((convert_three_channel(frame_roi), frame_lanes)))
-        cv2.waitKey(3)
+        return frame_lanes, frame_roi
 
+    def process_frame(self, frame: np.array) -> np.array:
+        result, frame_roi = self.__detect_lines(frame)
 
-    def process_video(self) -> None:
+        return result, frame_roi
+
+    def process_video(self, visualize: bool = False) -> np.array:
         video = cv2.VideoCapture(self.video_path)
         ret = True
 
         while(ret):
             try:
                 ret, frame = video.read()
-                self.__detect_lines(frame)
+                result, frame_roi = self.__detect_lines(frame)
+
+                if(visualize):
+                    cv2.imshow("Result", result)
+                    cv2.imshow("ROI", frame_roi)
+                    cv2.waitKey(3)
             except Exception as e:
                 # print("Exception: ", e)
                 pass
 
+        return result, frame_roi
 
 def main():
     Parser = argparse.ArgumentParser()
@@ -105,9 +111,10 @@ def main():
     
     Args = Parser.parse_args()
     video_path = Args.VideoPath
-    
+    visualize = Args.Visualize
+
     LD = LaneDetector(video_path)
-    LD.process_video()
+    LD.process_video(visualize)
 
 if __name__ == '__main__':
     main()

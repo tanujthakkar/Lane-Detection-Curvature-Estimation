@@ -56,32 +56,35 @@ class CurvatureEstimator:
 
     def __birds_eye_view(self, frame: np.array, corners: np.array, height: int, width: int) -> np.array:
 
+        padding = width * .25
         corners_bev = np.array([[0, 0],
-                            [height, 0],
+                            [0, width],
                             [height, width],
-                            [0, width]]) # Corners of the warped birds-eye-view
+                            [height, 0]]) # Corners of the warped birds-eye-view
         H = cv2.getPerspectiveTransform(np.float32(corners), np.float32(corners_bev))
+        H_inv = np.linalg.inv(H)
 
-        birds_eye_view = cv2.warpPerspective(frame, H, (frame.shape[1], frame.shape[0]))
+        birds_eye_view = cv2.warpPerspective(frame, H, (750, frame.shape[0]))
 
-        # cv2.imshow("", birds_eye_view)
-        # cv2.waitKey()
+        return birds_eye_view
 
     def __estimate_curvature(self, frame: np.array) -> np.array:
 
         # frame_blur = cv2.GaussianBlur(frame, (5, 5), 0)
         frame_filtered = self.__filter_lines(frame)
 
-        corners = np.array([[220, 680],
+        corners = np.array([[590, 450],
+                            [220, 680],
                             [1130, 680],
-                            [735, 450],
-                            [590, 450]]) # Corners of the region of interest
+                            [735, 450]]) # Corners of the region of interest
+        cv2.polylines(frame, [corners], True, (0,0,255), 2)
         frame_roi = self.__mask_roi(frame_filtered, corners)
 
-        # self.__birds_eye_view(frame_roi, corners, 720, 360)
+        birds_eye_view = self.__birds_eye_view(frame_roi, corners, frame_roi.shape[0], frame_roi.shape[1])
 
         cv2.imshow("Frame", frame)
         cv2.imshow("Lane", frame_roi)
+        cv2.imshow("Birds Eye View", birds_eye_view)
         cv2.waitKey()
 
 

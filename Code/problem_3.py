@@ -57,7 +57,6 @@ class CurvatureEstimator:
 
     def __birds_eye_view(self, frame: np.array, corners: np.array, height: int, width: int) -> np.array:
 
-        padding = width * .25
         corners_bev = np.array([[0, 0],
                             [0, width],
                             [height, width],
@@ -88,7 +87,7 @@ class CurvatureEstimator:
 
         return histogram, left_peak, right_peak
 
-    def __sliding_window(self, frame: np.array, histogram_peaks: list, num_windows: int):
+    def __sliding_window(self, frame: np.array, histogram_peaks: list, num_windows: int) -> np.array:
 
         frame_sliding_window = np.copy(frame)
         # print(frame_sliding_window.shape)
@@ -101,22 +100,48 @@ class CurvatureEstimator:
         left_window_mean = left_peak
         right_window_mean = right_peak
 
+        left_centroids = list()
+        right_centroids = list()
+
         height = frame.shape[0]-1 - window_height
         for window in range(num_windows-1):
             left_window = frame[height:height + window_height, left_window_mean - (window_width//2):left_window_mean + (window_width//2)]
             if(len(np.where(left_window == 255)[1]) > 10):
                 left_window_mean = int(np.mean(np.where(left_window == 255)[1])) + left_window_mean - (window_width//2)
+            left_centroids.append([height + window_height//2, left_window_mean])
             cv2.rectangle(frame_sliding_window, (left_window_mean - (window_width//2), height), (left_window_mean + (window_width//2), height + window_height), 255, 2)
 
             right_window = frame[height:height + window_height, right_window_mean - (window_width//2):right_window_mean + (window_width//2)]
             if(len(np.where(right_window == 255)[1]) > 10):
                 right_window_mean = int(np.mean(np.where(right_window == 255)[1])) + right_window_mean - (window_width//2)
+            right_centroids.append([height + window_height//2, right_window_mean])
             cv2.rectangle(frame_sliding_window, (right_window_mean - (window_width//2), height), (right_window_mean + (window_width//2), height + window_height), 255, 2)
 
             height -= window_height
 
-        cv2.imshow("Sliding Window", frame_sliding_window)
-        cv2.waitKey()
+        centroids = np.array([left_centroids,
+                              right_centroids])
+
+        return centroids, frame_sliding_window
+
+    def __fit_lines(self, frame: np.array, centroids: np.array) -> np.array:
+
+        frame_lane_lines = convert_three_channel(np.copy(frame))
+
+        left_fit = np.polyfit(centroids[0,:,0], centroids[0,:,1], 2)
+        right_fit = np.polyfit(centroids[1,:,0], centroids[1,:,1], 2)
+
+        x = np.linspace(0, frame.shape[0]-1, frame.shape[0])
+        y = left_fit[0]*(x**2) + left_fit[1]*x + left_fit[2]
+        left_lane_line = np.array([y, x], dtype=int).transpose()
+
+        y = right_fit[0]*(x**2) + right_fit[1]*x + right_fit[2]
+        right_lane_line = np.array([y, x], dtype=int).transpose()
+
+        cv2.polylines(frame_lane_lines, [left_lane_line], False, (0, 0, 255), 2)
+        cv2.polylines(frame_lane_lines, [right_lane_line], False, (0, 0, 255), 2)
+
+        return left_lane_line, right_lane_line, frame_lane_lines
 
     def __estimate_curvature(self, frame: np.array) -> np.array:
 
@@ -132,11 +157,14 @@ class CurvatureEstimator:
 
         birds_eye_view = self.__birds_eye_view(frame_roi, corners, frame_roi.shape[0], frame_roi.shape[1])
         histogram, left_peak, right_peak = self.__calculate_histogram_peaks(birds_eye_view)
-        self.__sliding_window(birds_eye_view, [left_peak, right_peak], 20)
+        centroids, frame_sliding_window = self.__sliding_window(birds_eye_view, [left_peak, right_peak], 20)
+        left_lane_line, right_lane_line, frame_lane_lines = self.__fit_lines(frame_sliding_window, centroids)
 
         cv2.imshow("Frame", frame)
         cv2.imshow("Lane", frame_roi)
         cv2.imshow("Birds Eye View", birds_eye_view)
+        cv2.imshow("Sliding Window", frame_sliding_window)
+        cv2.imshow("Lane Lines", frame_lane_lines)
         cv2.waitKey()
 
     def process_video(self, visualize: bool = False) -> None:

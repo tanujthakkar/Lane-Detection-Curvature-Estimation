@@ -18,6 +18,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import argparse
+import time
 
 from utils import *
 
@@ -68,6 +69,55 @@ class CurvatureEstimator:
 
         return birds_eye_view
 
+    def __calculate_histogram_peaks(self, frame: np.array, visualize: bool = False) -> np.array:
+
+        location = np.arange(frame.shape[1], dtype=int)
+        histogram = np.sum(frame[int(frame.shape[0]/2):,:], axis=0)
+
+        midpoint = histogram.shape[0]//2
+        left_peak = np.argmax(histogram[:midpoint])
+        right_peak = np.argmax(histogram[midpoint:]) + midpoint
+
+        if(visualize):
+            plt.figure()
+            plt.title("Histogram")
+            plt.xlabel("Pixel Location")
+            plt.ylabel("Pixel Count")
+            plt.plot(location, histogram)
+            plt.show()
+
+        return histogram, left_peak, right_peak
+
+    def __sliding_window(self, frame: np.array, histogram_peaks: list, num_windows: int):
+
+        frame_sliding_window = np.copy(frame)
+        # print(frame_sliding_window.shape)
+
+        window_height = frame.shape[0]//num_windows
+        window_width = frame.shape[1]//12
+        # print("Window H, W:", window_height, window_width)
+
+        left_peak, right_peak = histogram_peaks
+        left_window_mean = left_peak
+        right_window_mean = right_peak
+
+        height = frame.shape[0]-1 - window_height
+        for window in range(num_windows-1):
+            left_window = frame[height:height + window_height, left_window_mean - (window_width//2):left_window_mean + (window_width//2)]
+            if(len(np.where(left_window == 255)[1]) > 10):
+                left_window_mean = int(np.mean(np.where(left_window == 255)[1])) + left_window_mean - (window_width//2)
+            cv2.rectangle(frame_sliding_window, (left_window_mean - (window_width//2), height), (left_window_mean + (window_width//2), height + window_height), 255, 2)
+
+            right_window = frame[height:height + window_height, right_window_mean - (window_width//2):right_window_mean + (window_width//2)]
+            if(len(np.where(right_window == 255)[1]) > 10):
+                right_window_mean = int(np.mean(np.where(right_window == 255)[1])) + right_window_mean - (window_width//2)
+            cv2.rectangle(frame_sliding_window, (right_window_mean - (window_width//2), height), (right_window_mean + (window_width//2), height + window_height), 255, 2)
+
+            height -= window_height
+
+        cv2.imshow("Sliding Window", frame_sliding_window)
+        cv2.waitKey()
+
     def __estimate_curvature(self, frame: np.array) -> np.array:
 
         # frame_blur = cv2.GaussianBlur(frame, (5, 5), 0)
@@ -81,12 +131,13 @@ class CurvatureEstimator:
         frame_roi = self.__mask_roi(frame_filtered, corners)
 
         birds_eye_view = self.__birds_eye_view(frame_roi, corners, frame_roi.shape[0], frame_roi.shape[1])
+        histogram, left_peak, right_peak = self.__calculate_histogram_peaks(birds_eye_view)
+        self.__sliding_window(birds_eye_view, [left_peak, right_peak], 20)
 
         cv2.imshow("Frame", frame)
         cv2.imshow("Lane", frame_roi)
         cv2.imshow("Birds Eye View", birds_eye_view)
         cv2.waitKey()
-
 
     def process_video(self, visualize: bool = False) -> None:
         video = cv2.VideoCapture(self.video_path)

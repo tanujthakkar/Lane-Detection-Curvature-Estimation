@@ -113,15 +113,11 @@ class HistogramEqulization:
 
         return output
 
-    def adaptive_equalize(self, img: np.array, clip: int = 0) -> np.array:
+    def adaptive_equalize(self, img: np.array, tile_size: tuple = (64, 64), clip: int = 0) -> np.array:
 
         self.output = np.copy(img)
 
-        # r_step = img.shape[0]//8
-        # c_step = img.shape[1]//8
-
-        r_step = 64
-        c_step = 64
+        r_step, c_step = tile_size
 
         for r in range(0, img.shape[0], r_step):
             for c in range(0, img.shape[1], c_step):
@@ -130,30 +126,56 @@ class HistogramEqulization:
         return self.output
 
 
-def hist_equalize_img(img_path: str, clahe: bool = False) -> np.array:
+def hist_equalize_img(img_path: str, clahe: bool = False, visualize: bool = False) -> np.array:
 
     img = cv2.imread(img_path)
     HE = HistogramEqulization(img)
     if(not clahe):
         output = HE.equalize(img)
     else:
-        output = HE.adaptive_equalize(img, 5)
-        
-    cv2.imshow("Histogram Equlization", np.vstack((img, output)))
-    cv2.waitKey()
+        output = HE.adaptive_equalize(img, clip=10)
+    
+    if(visualize):
+        cv2.imshow("Histogram Equlization", np.vstack((img, output)))
+        cv2.waitKey(5)
 
+    return output
+
+def hist_equalize_data(data_dir: str, result_dir: str, clahe: bool = False, visualize: bool = False) -> None:
+
+    img_set = read_image_set(data_dir)
+
+    if(clahe):
+        result_dir = os.path.join(result_dir, data_dir.split('/')[-2] + '_processed_CLAHE')
+    else:
+        result_dir = os.path.join(result_dir, data_dir.split('/')[-2] + '_processed')
+    if(not os.path.exists(result_dir)):
+        os.makedirs(result_dir, exist_ok=True)
+
+    for img in img_set:
+        output_file = img.split('/')[-1].split('.')[0] + '.png'
+        output = hist_equalize_img(img, clahe, visualize)
+        cv2.imwrite(os.path.join(result_dir, output_file), output)
 
 def main():
     Parser = argparse.ArgumentParser()
-    Parser.add_argument('--ImagePath', type=str, default="../Data/adaptive_hist_data/0000000000.png", help='Path to input image')
+    Parser.add_argument('--ImagePath', type=str, default=None, help='Path to input image')
+    Parser.add_argument('--DataDir', type=str, default="../Data/adaptive_hist_data/", help='Path to data directory')
+    Parser.add_argument('--ResultDir', type=str, default="../Result/", help='Path to results directory')
     Parser.add_argument('--CLAHE', action='store_true', help='Toggle CLAHE')
     Parser.add_argument('--Visualize', action='store_true', help='Toggle visualization')
     
     Args = Parser.parse_args()
     image_path = Args.ImagePath
+    data_dir = Args.DataDir
+    result_dir = Args.ResultDir
     clahe = Args.CLAHE
+    visualize = Args.Visualize
 
-    hist_equalize_img(image_path, clahe)    
+    if(image_path):
+        hist_equalize_img(image_path, clahe, visualize)
+    else:
+        hist_equalize_data(data_dir, result_dir, clahe, visualize)
 
 
 if __name__ == '__main__':

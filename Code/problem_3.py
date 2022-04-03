@@ -25,7 +25,7 @@ from utils import *
 class CurvatureEstimator:
 
     def __init__(self, video_path: str) -> None:
-        self.video_path = video_path
+        self.video_path = video_path 
 
     def __filter_lines(self, frame: np.array) -> np.array:
         hls_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HLS)
@@ -92,7 +92,7 @@ class CurvatureEstimator:
 
     def __sliding_window(self, frame: np.array, histogram_peaks: list, num_windows: int) -> np.array:
 
-        frame_sliding_window = np.copy(frame)
+        frame_sliding_window = convert_three_channel(np.zeros_like(frame))
         # print(frame_sliding_window.shape)
 
         window_height = frame.shape[0]//num_windows
@@ -112,13 +112,15 @@ class CurvatureEstimator:
             if(len(np.where(left_window == 255)[1]) > 10):
                 left_window_mean = int(np.mean(np.where(left_window == 255)[1])) + left_window_mean - (window_width//2)
             left_centroids.append([height + window_height//2, left_window_mean])
-            cv2.rectangle(frame_sliding_window, (left_window_mean - (window_width//2), height), (left_window_mean + (window_width//2), height + window_height), 255, 2)
+            cv2.circle(frame_sliding_window, (left_window_mean, height + window_height//2), 10, (255,0,0), 5)
+            # cv2.rectangle(frame_sliding_window, (left_window_mean - (window_width//2), height), (left_window_mean + (window_width//2), height + window_height), (0,255,0), 2)
 
             right_window = frame[height:height + window_height, right_window_mean - (window_width//2):right_window_mean + (window_width//2)]
             if(len(np.where(right_window == 255)[1]) > 10):
                 right_window_mean = int(np.mean(np.where(right_window == 255)[1])) + right_window_mean - (window_width//2)
             right_centroids.append([height + window_height//2, right_window_mean])
-            cv2.rectangle(frame_sliding_window, (right_window_mean - (window_width//2), height), (right_window_mean + (window_width//2), height + window_height), 255, 2)
+            cv2.circle(frame_sliding_window, (right_window_mean, height + window_height//2), 10, (0,255,0), 5)
+            # cv2.rectangle(frame_sliding_window, (right_window_mean - (window_width//2), height), (right_window_mean + (window_width//2), height + window_height), (0,255,0), 2)
 
             height -= window_height
 
@@ -127,12 +129,21 @@ class CurvatureEstimator:
 
         return centroids, frame_sliding_window
 
-    def __fit_lines(self, frame: np.array, centroids: np.array) -> np.array:
+    def __fit_lines(self, frame: np.array, centroids: np.array, sliding_average: int = 10) -> np.array:
 
-        frame_lane_lines = convert_three_channel(np.copy(frame))
+        frame_lane_lines = np.copy(frame)
 
         left_fit = np.polyfit(centroids[0,:,0], centroids[0,:,1], 2)
         right_fit = np.polyfit(centroids[1,:,0], centroids[1,:,1], 2)
+
+        if(len(self.line_fits[0]) >= sliding_average):
+            self.line_fits[0].pop(0)
+            self.line_fits[1].pop(0)
+        self.line_fits[0].append(left_fit)
+        self.line_fits[1].append(right_fit)
+
+        left_fit = np.mean(self.line_fits[0], axis=0)
+        right_fit = np.mean(self.line_fits[1], axis=0)
 
         x = np.linspace(0, frame.shape[0]-1, frame.shape[0])
         y = left_fit[0]*(x**2) + left_fit[1]*x + left_fit[2]
@@ -141,8 +152,8 @@ class CurvatureEstimator:
         y = right_fit[0]*(x**2) + right_fit[1]*x + right_fit[2]
         right_lane_line = np.array([y, x], dtype=int).transpose()
 
-        cv2.polylines(frame_lane_lines, [left_lane_line], False, (0, 0, 255), 2)
-        cv2.polylines(frame_lane_lines, [right_lane_line], False, (0, 0, 255), 2)
+        cv2.polylines(frame_lane_lines, [left_lane_line], False, (0, 0, 255), 4)
+        cv2.polylines(frame_lane_lines, [right_lane_line], False, (0, 255, 255), 4)
 
         return left_fit, left_lane_line, right_fit, right_lane_line, frame_lane_lines
 
@@ -160,7 +171,7 @@ class CurvatureEstimator:
 
     def __estimate_curvature(self, frame: np.array) -> np.array:
 
-        frame = np.array(np.flip(frame, axis=1))
+        # frame = np.array(np.flip(frame, axis=1))
         frame_filtered = self.__filter_lines(frame)
 
         h, w, _ = frame.shape
@@ -169,7 +180,7 @@ class CurvatureEstimator:
                             [1200, 680],
                             [750, 470]]) # Corners of the region of interest
 
-        cv2.polylines(frame, [corners], True, (0,0,255), 2)
+        # cv2.polylines(frame, [corners], True, (0,0,255), 2)
         # frame_roi = self.__mask_roi(frame_filtered, corners)
 
         birds_eye_view, H = self.__birds_eye_view(frame_filtered, corners, frame_filtered.shape[0], frame_filtered.shape[1])
@@ -177,30 +188,52 @@ class CurvatureEstimator:
         centroids, frame_sliding_window = self.__sliding_window(birds_eye_view, [left_peak, right_peak], 20)
         left_fit, left_lane_line, right_fit, right_lane_line, frame_lane_lines = self.__fit_lines(frame_sliding_window, centroids)
 
-        left_curvature = ((1 +(2*left_fit[0]*frame_sliding_window.shape[0]*(30/frame_sliding_window.shape[0]) + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
-        right_curvature = ((1 +(2*right_fit[0]*frame_sliding_window.shape[0]*(30/frame_sliding_window.shape[0]) + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
-        # print(left_curvature, right_curvature)
-        # print(left_curvature - right_curvature)
+        left_curvature = ((1+(2*left_fit[0]*frame_sliding_window.shape[0]*(30/frame_sliding_window.shape[0]) + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
+        right_curvature = ((1+(2*right_fit[0]*frame_sliding_window.shape[0]*(30/frame_sliding_window.shape[0]) + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
+        curvature_diff = left_curvature - right_curvature
 
         frame_projected = self.__project_lane(frame, birds_eye_view, np.vstack((left_lane_line, np.flipud(right_lane_line))), H)
+        if(curvature_diff > 0):
+            cv2.putText(frame_projected, 'Turn Right', (w//2,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        elif(curvature_diff < 0):
+            cv2.putText(frame_projected, 'Turn Left', (w//2,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
 
-        cv2.imshow("Frame", frame_projected)
-        # cv2.imshow("Lane", frame_roi)
+        frame = cv2.resize(frame, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        frame_filtered = cv2.resize(convert_three_channel(frame_filtered), None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        birds_eye_view = cv2.resize(convert_three_channel(birds_eye_view), None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        frame_lane_lines = cv2.resize(frame_lane_lines, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        frame_projected = cv2.resize(frame_projected, None, fx=0.7, fy=0.7, interpolation=cv2.INTER_CUBIC)
+
+        top_row = np.hstack((frame, frame_filtered))
+        bottom_row = np.hstack((birds_eye_view, frame_lane_lines))
+        pipeline = np.vstack((top_row, bottom_row))
+        result = np.hstack((frame_projected, pipeline))
+
+        # cv2.imshow("Frame", frame_projected)
+        # cv2.imshow("Lane", temp)
         # cv2.imshow("Birds Eye View", birds_eye_view)
         # cv2.imshow("Sliding Window", frame_sliding_window)
-        cv2.imshow("Lane Lines", frame_lane_lines)
-        cv2.waitKey()
+        # cv2.imshow("Lane Lines", frame_lane_lines)
+        # cv2.waitKey()
+
+        return result
 
     def process_video(self, visualize: bool = False) -> None:
         video = cv2.VideoCapture(self.video_path)
         ret = True
 
-        while(ret):
-            ret, frame = video.read()
-            self.__estimate_curvature(frame)
-            if(visualize):
-                cv2.imshow("Result", frame)
-                cv2.waitKey(0)
+        self.line_fits = [[],[]] # Sliding mean of polynomial coefficients
+
+        while(True):
+            try:
+                ret, frame = video.read()
+                result = self.__estimate_curvature(frame)
+                if(visualize):
+                    cv2.imshow("Result", result)
+                    cv2.waitKey(3)
+            except Exception as e:
+                # print(e)
+                break
 
 def main():
     Parser = argparse.ArgumentParser()

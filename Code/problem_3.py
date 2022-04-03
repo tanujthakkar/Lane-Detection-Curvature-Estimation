@@ -57,16 +57,19 @@ class CurvatureEstimator:
 
     def __birds_eye_view(self, frame: np.array, corners: np.array, height: int, width: int) -> np.array:
 
-        corners_bev = np.array([[0, 0],
-                            [0, width],
-                            [height, width],
-                            [height, 0]]) # Corners of the warped birds-eye-view
+        x_min, y_min = np.min(corners, axis=0)
+        x_max, y_max = np.max(corners, axis=0)
+
+        corners_bev = np.array([[320, 1],
+                                [320, 680],
+                                [920, 680],
+                                [920, 1]]) # Corners of the warped birds-eye-view
         H = cv2.getPerspectiveTransform(np.float32(corners), np.float32(corners_bev))
         H_inv = np.linalg.inv(H)
 
-        birds_eye_view = cv2.warpPerspective(frame, H, (750, frame.shape[0]))
+        birds_eye_view = cv2.warpPerspective(frame, H, (frame.shape[1], frame.shape[0]))
 
-        return birds_eye_view
+        return birds_eye_view, H
 
     def __calculate_histogram_peaks(self, frame: np.array, visualize: bool = False) -> np.array:
 
@@ -141,29 +144,50 @@ class CurvatureEstimator:
         cv2.polylines(frame_lane_lines, [left_lane_line], False, (0, 0, 255), 2)
         cv2.polylines(frame_lane_lines, [right_lane_line], False, (0, 0, 255), 2)
 
-        return left_lane_line, right_lane_line, frame_lane_lines
+        return left_fit, left_lane_line, right_fit, right_lane_line, frame_lane_lines
+
+    def __project_lane(self, frame: np.array, birds_eye_view: np.array, lane_lines: np.array, homography: np.array) -> np.array:
+
+        frame_projected = convert_three_channel(np.zeros_like(birds_eye_view))
+        cv2.fillPoly(frame_projected, [lane_lines], (0, 255, 0))
+
+        H_inv = np.linalg.inv(homography)
+
+        frame_projected = cv2.warpPerspective(frame_projected, H_inv, (frame.shape[1], frame.shape[0]))
+        frame_projected = cv2.addWeighted(frame, 1, frame_projected, 0.4, 0)
+
+        return frame_projected
 
     def __estimate_curvature(self, frame: np.array) -> np.array:
 
-        # frame_blur = cv2.GaussianBlur(frame, (5, 5), 0)
+        frame = np.array(np.flip(frame, axis=1))
         frame_filtered = self.__filter_lines(frame)
 
-        corners = np.array([[590, 450],
+        h, w, _ = frame.shape
+        corners = np.array([[570, 470],
                             [220, 680],
-                            [1130, 680],
-                            [735, 450]]) # Corners of the region of interest
-        cv2.polylines(frame, [corners], True, (0,0,255), 2)
-        frame_roi = self.__mask_roi(frame_filtered, corners)
+                            [1200, 680],
+                            [750, 470]]) # Corners of the region of interest
 
-        birds_eye_view = self.__birds_eye_view(frame_roi, corners, frame_roi.shape[0], frame_roi.shape[1])
+        cv2.polylines(frame, [corners], True, (0,0,255), 2)
+        # frame_roi = self.__mask_roi(frame_filtered, corners)
+
+        birds_eye_view, H = self.__birds_eye_view(frame_filtered, corners, frame_filtered.shape[0], frame_filtered.shape[1])
         histogram, left_peak, right_peak = self.__calculate_histogram_peaks(birds_eye_view)
         centroids, frame_sliding_window = self.__sliding_window(birds_eye_view, [left_peak, right_peak], 20)
-        left_lane_line, right_lane_line, frame_lane_lines = self.__fit_lines(frame_sliding_window, centroids)
+        left_fit, left_lane_line, right_fit, right_lane_line, frame_lane_lines = self.__fit_lines(frame_sliding_window, centroids)
 
-        cv2.imshow("Frame", frame)
-        cv2.imshow("Lane", frame_roi)
-        cv2.imshow("Birds Eye View", birds_eye_view)
-        cv2.imshow("Sliding Window", frame_sliding_window)
+        left_curvature = ((1 +(2*left_fit[0]*frame_sliding_window.shape[0]*(30/frame_sliding_window.shape[0]) + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
+        right_curvature = ((1 +(2*right_fit[0]*frame_sliding_window.shape[0]*(30/frame_sliding_window.shape[0]) + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
+        # print(left_curvature, right_curvature)
+        # print(left_curvature - right_curvature)
+
+        frame_projected = self.__project_lane(frame, birds_eye_view, np.vstack((left_lane_line, np.flipud(right_lane_line))), H)
+
+        cv2.imshow("Frame", frame_projected)
+        # cv2.imshow("Lane", frame_roi)
+        # cv2.imshow("Birds Eye View", birds_eye_view)
+        # cv2.imshow("Sliding Window", frame_sliding_window)
         cv2.imshow("Lane Lines", frame_lane_lines)
         cv2.waitKey()
 
@@ -174,10 +198,8 @@ class CurvatureEstimator:
         while(ret):
             ret, frame = video.read()
             self.__estimate_curvature(frame)
-
             if(visualize):
-                cv2.imshow("Result", result)
-                cv2.imshow("ROI", frame_roi)
+                cv2.imshow("Result", frame)
                 cv2.waitKey(0)
 
 def main():

@@ -139,8 +139,9 @@ class LaneDetector:
                 # print("Exception: ", e)
                 pass
 
-        cv2.destroyAllWindows()
-        video_writer.release()
+        if(save_output):
+            cv2.destroyAllWindows()
+            video_writer.release()
 
 
 def main():

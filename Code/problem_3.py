@@ -260,8 +260,9 @@ class CurvatureEstimator:
                 # print(e)
                 pass
 
-        cv2.destroyAllWindows()
-        video_writer.release()
+        if(save_output):
+            cv2.destroyAllWindows()
+            video_writer.release()
 
 def main():
     Parser = argparse.ArgumentParser()

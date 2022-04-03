@@ -238,8 +238,12 @@ class CurvatureEstimator:
         self.line_fits = [[],[]] # Sliding mean of polynomial coefficients
 
         if(save_output):
+            ret, frame = video.read()
+            result = self.__estimate_curvature(frame)
+            
             save_file = os.path.join(self.save_path, self.video_path.split('/')[-1].split('.')[0]) + '_processed.mp4'
-            video_writer = cv2.VideoWriter(save_file, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (1792, 504))
+            video_writer = cv2.VideoWriter(save_file, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (result.shape[1], result.shape[0]))
+            video_writer.write(result)
 
         while(ret):
             try:

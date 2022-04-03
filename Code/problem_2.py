@@ -23,8 +23,11 @@ from utils import *
 
 class LaneDetector:
 
-    def __init__(self, video_path: str) -> None:
+    def __init__(self, video_path: str, save_path: str) -> None:
         self.video_path = video_path
+        self.save_path = save_path
+        if(not os.path.exists(self.save_path)):
+            os.makedirs(self.save_path, exist_ok=True)
 
     def __mask_roi(self, frame: np.array, corners: np.array) -> np.array:
         mask = np.zeros_like(frame)
@@ -60,10 +63,10 @@ class LaneDetector:
 
         return [solid_lane, dashed_lane]
 
-    def __fit_lines(self, frame: np.array, lanes: list):
+    def __fit_lines(self, frame: np.array, lines: list) -> None:
 
-        solid_line_pts = np.array(lanes[0])
-        dashed_line_pts = np.array(lanes[1])
+        solid_line_pts = np.array(lines[0])
+        dashed_line_pts = np.array(lines[1])
 
         solid_line_fit = np.polyfit(solid_line_pts[:,1], solid_line_pts[:,0], 1)
         dashed_line_fit = np.polyfit(dashed_line_pts[:,1], dashed_line_pts[:,0], 1)
@@ -109,36 +112,52 @@ class LaneDetector:
 
         return result, frame_roi
 
-    def process_video(self, visualize: bool = False) -> np.array:
+    def process_video(self, save_output: bool = False, visualize: bool = False) -> None:
         video = cv2.VideoCapture(self.video_path)
         ret = True
+
+        if(save_output):
+            ret, frame = video.read()
+            result, frame_roi = self.__detect_lines(frame)
+            
+            save_file = os.path.join(self.save_path, self.video_path.split('/')[-1].split('.')[0]) + '_processed.mp4'
+            video_writer = cv2.VideoWriter(save_file, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (result.shape[1], result.shape[0]))
+            video_writer.write(result)
 
         while(ret):
             try:
                 ret, frame = video.read()
                 result, frame_roi = self.__detect_lines(frame)
 
+                if(save_output):
+                    video_writer.write(result)
+
                 if(visualize):
                     cv2.imshow("Result", result)
-                    # cv2.imshow("ROI", frame_roi)
-                    cv2.waitKey(0)
+                    cv2.waitKey(3)
             except Exception as e:
-                print("Exception: ", e)
+                # print("Exception: ", e)
                 pass
 
-        # return result, frame_roi
+        cv2.destroyAllWindows()
+        video_writer.release()
+
 
 def main():
     Parser = argparse.ArgumentParser()
     Parser.add_argument('--VideoPath', type=str, default="../Data/whiteline.mp4", help='Path to input video')
+    Parser.add_argument('--Save', action='store_true', help='Toggle to save output')
+    Parser.add_argument('--SavePath', type=str, default="../Result/", help='Path to results folder')
     Parser.add_argument('--Visualize', action='store_true', help='Toggle visualization')
     
     Args = Parser.parse_args()
     video_path = Args.VideoPath
+    save_output = Args.Save
+    save_path = Args.SavePath
     visualize = Args.Visualize
 
-    LD = LaneDetector(video_path)
-    LD.process_video(visualize)
+    LD = LaneDetector(video_path, save_path)
+    LD.process_video(save_output, visualize)
 
 if __name__ == '__main__':
     main()

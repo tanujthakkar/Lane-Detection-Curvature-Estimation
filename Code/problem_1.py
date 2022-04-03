@@ -3,7 +3,7 @@
 """
 ENPM673 Spring 2022: Perception for Autonomous Robots
 
-Project 2 - Lane Detection & Curvature Estimation
+Project 2: Problem 1 - Histrogram Equalization
 
 Author(s):
 Tanuj Thakkar (tanuj@umd.edu)
@@ -29,7 +29,7 @@ class HistogramEqulization:
         self.img_gray = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
         self.output = None
 
-    def __compute_histogram(self, img: np.array) -> np.array:
+    def __compute_histogram(self, img: np.array, clip: int = None) -> np.array:
         '''
             Compute the histogram of an image
 
@@ -43,8 +43,15 @@ class HistogramEqulization:
         histogram = np.zeros(256, dtype=int)
         bins = np.arange(256)
 
+        residue = 0
+
         for i in img.flatten():
-            histogram[i] += 1
+            if(clip):
+                if(histogram[i] >= clip):
+                    histogram[i] = clip
+                    residue += 1
+            else:
+                histogram[i] += 1
 
         plt.figure()
         plt.title("Grayscale Histogram")
@@ -77,35 +84,29 @@ class HistogramEqulization:
 
     def equalize(self, img: np.array) -> np.array:
 
-        # b, g, r = cv2.split(img)
-        # img_split = [b, g, r]
-
-        lab_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(img)
+        hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv_img)
         img_split = [h, s, v]
 
-        output = list()
+        cv2.imshow("HSV", hsv_img)
+        cv2.waitKey()
 
-        for i, c in enumerate(img_split[:1]):
-            histogram = self.__compute_histogram(c)
-            cdf = self.__compute_cdf(histogram)
-            cdf_min = np.min(cdf[np.nonzero(cdf)])
+        histogram = self.__compute_histogram(v)
+        cdf = self.__compute_cdf(histogram)
+        cdf_min = np.min(cdf[np.nonzero(cdf)])
 
-            channel = np.zeros(c.flatten().shape, dtype=int)
+        channel = np.zeros(v.flatten().shape, dtype=int)
 
-            h, w = c.shape
+        height, width = v.shape
+        # print(v.flatten().shape)
 
-            for i, pixel in enumerate(c.flatten()):
-                channel[i] = ((cdf[pixel] - cdf_min)/((h*w) - cdf_min)) * 255
+        for i, pixel in enumerate(v.flatten()):
+            channel[i] = ((cdf[pixel] - cdf_min)/((height*width) - cdf_min)) * 255.0
 
-            channel = channel.reshape(c.shape)
-            output.append(channel)
+        channel = channel.reshape(v.shape)
 
-        output = np.dstack((channel, s, v))
-
-        # self.output = output
-        # cv2.imshow("Result", np.uint8(output))
-        # cv2.waitKey()
+        hsv_img[:,:,2] = channel
+        output = cv2.cvtColor(hsv_img, cv2.COLOR_HSV2BGR)
 
         return output
 
@@ -120,30 +121,31 @@ class HistogramEqulization:
             for c in range(0, self.img.shape[1], c_step):
                 self.output[r:r+r_step, c:c+c_step, :] = self.equalize(self.img[r:r+r_step, c:c+c_step, :])
 
-    def visualize(self) -> None:
-        cv2.imshow("Image", self.img)
-        cv2.imshow("Result", np.uint8(self.output))
-        cv2.waitKey()
+        return self.output
 
 
-def hist_equalize_img(img_path: str) -> np.array:
+def hist_equalize_img(img_path: str, visualize: bool = False) -> np.array:
 
     img = cv2.imread(img_path)
     HE = HistogramEqulization(img)
-    # HE.equalize(img)
-    HE.adaptive_equalize()
-    HE.visualize()
+    # output = HE.equalize(img)
+    output = HE.adaptive_equalize()
 
+    if(visualize):
+        cv2.imshow("Frame", img)
+        cv2.imshow("Result", np.uint8(output))
+        cv2.waitKey()
 
 def main():
     Parser = argparse.ArgumentParser()
-    Parser.add_argument('--ImagePath', type=str, default="../Data/adaptive_hist_data/0000000024.png", help='Path to input image')
+    Parser.add_argument('--ImagePath', type=str, default="../Data/adaptive_hist_data/0000000010.png", help='Path to input image')
     Parser.add_argument('--Visualize', action='store_true', help='Toggle visualization')
     
     Args = Parser.parse_args()
     image_path = Args.ImagePath
+    visualize = Args.Visualize
 
-    hist_equalize_img(image_path)    
+    hist_equalize_img(image_path, visualize)    
 
 
 if __name__ == '__main__':

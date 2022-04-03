@@ -24,8 +24,11 @@ from utils import *
 
 class CurvatureEstimator:
 
-    def __init__(self, video_path: str) -> None:
-        self.video_path = video_path 
+    def __init__(self, video_path: str, save_path: str) -> None:
+        self.video_path = video_path
+        self.save_path = save_path
+        if(not os.path.exists(self.save_path)):
+            os.makedirs(self.save_path, exist_ok=True)
 
     def __filter_lines(self, frame: np.array) -> np.array:
         hls_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HLS)
@@ -92,7 +95,7 @@ class CurvatureEstimator:
 
     def __sliding_window(self, frame: np.array, histogram_peaks: list, num_windows: int) -> np.array:
 
-        frame_sliding_window = convert_three_channel(np.zeros_like(frame))
+        frame_sliding_window = convert_three_channel(np.copy(frame))
         # print(frame_sliding_window.shape)
 
         window_height = frame.shape[0]//num_windows
@@ -193,14 +196,24 @@ class CurvatureEstimator:
         curvature_diff = left_curvature - right_curvature
 
         frame_projected = self.__project_lane(frame, birds_eye_view, np.vstack((left_lane_line, np.flipud(right_lane_line))), H)
-        if(curvature_diff > 0):
-            cv2.putText(frame_projected, 'Turn Right', (w//2,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
-        elif(curvature_diff < 0):
-            cv2.putText(frame_projected, 'Turn Left', (w//2,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame_projected, "Left Curvature: {:.2f}".format(left_curvature), (20,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame_projected, "Right Curvature: {:.2f}".format(right_curvature), (940,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame_projected, "Avg. Curvature: {:.2f}".format((left_curvature+right_curvature)/2), (w//2-125,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
 
+        if(curvature_diff > 0):
+            cv2.putText(frame_projected, 'Turn Right', (w//2-50,60), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        elif(curvature_diff < 0):
+            cv2.putText(frame_projected, 'Turn Left', (w//2-50,60), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        else:
+            cv2.putText(frame_projected, 'Go Straight', (w//2,60), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+
+        cv2.putText(frame, 'Frame', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
         frame = cv2.resize(frame, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
-        frame_filtered = cv2.resize(convert_three_channel(frame_filtered), None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
-        birds_eye_view = cv2.resize(convert_three_channel(birds_eye_view), None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        frame_filtered = cv2.putText(convert_three_channel(frame_filtered), 'Lane Filtering', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
+        frame_filtered = cv2.resize(frame_filtered, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        birds_eye_view = cv2.putText(convert_three_channel(birds_eye_view), 'Birds Eye View', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
+        birds_eye_view = cv2.resize(birds_eye_view, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        cv2.putText(frame_lane_lines, 'Curvature Estimation', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
         frame_lane_lines = cv2.resize(frame_lane_lines, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
         frame_projected = cv2.resize(frame_projected, None, fx=0.7, fy=0.7, interpolation=cv2.INTER_CUBIC)
 
@@ -218,34 +231,49 @@ class CurvatureEstimator:
 
         return result
 
-    def process_video(self, visualize: bool = False) -> None:
+    def process_video(self, save_output: bool = False, visualize: bool = False) -> None:
         video = cv2.VideoCapture(self.video_path)
         ret = True
 
         self.line_fits = [[],[]] # Sliding mean of polynomial coefficients
 
-        while(True):
+        if(save_output):
+            save_file = os.path.join(self.save_path, self.video_path.split('/')[-1].split('.')[0]) + '_processed.mp4'
+            video_writer = cv2.VideoWriter(save_file, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (1792, 504))
+
+        while(ret):
             try:
                 ret, frame = video.read()
                 result = self.__estimate_curvature(frame)
+
+                if(save_output):
+                    video_writer.write(result)
+
                 if(visualize):
                     cv2.imshow("Result", result)
                     cv2.waitKey(3)
             except Exception as e:
                 # print(e)
-                break
+                pass
+
+        cv2.destroyAllWindows()
+        video_writer.release()
 
 def main():
     Parser = argparse.ArgumentParser()
     Parser.add_argument('--VideoPath', type=str, default="../Data/challenge.mp4", help='Path to input video')
+    Parser.add_argument('--Save', action='store_true', help='Toggle to save output')
+    Parser.add_argument('--SavePath', type=str, default="../Result/", help='Path to results folder')
     Parser.add_argument('--Visualize', action='store_true', help='Toggle visualization')
     
     Args = Parser.parse_args()
     video_path = Args.VideoPath
+    save_output = Args.Save
+    save_path = Args.SavePath
     visualize = Args.Visualize
     
-    CE = CurvatureEstimator(video_path)
-    CE.process_video(visualize)
+    CE = CurvatureEstimator(video_path, save_path)
+    CE.process_video(save_output, visualize)
 
 if __name__ == '__main__':
     main()

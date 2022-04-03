@@ -44,19 +44,42 @@ class LaneDetector:
                     longest = dist
                     gradient = (y2-y1)/(x2-x1)
 
+        solid_lane = list()
+        dashed_lane = list()
+
         for lane in lanes:
             for x1, y1, x2, y2 in lane:
                 if(((y2-y1)/(x2-x1) > 0 and gradient > 0) or ((y2-y1)/(x2-x1) < 0 and gradient < 0)):
-                    cv2.line(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+                    solid_lane.append([x1, y1])
+                    solid_lane.append([x2, y2])
+                    # cv2.line(frame, (x1, y1), (x2, y2), (0,255,0), 2)
                 else:
-                    cv2.line(frame, (x1, y1), (x2, y2), (0,0,255), 2)
+                    dashed_lane.append([x1, y1])
+                    dashed_lane.append([x2, y2])
+                    # cv2.line(frame, (x1, y1), (x2, y2), (0,0,255), 2)
 
-    def __draw_lanes(self, frame: np.array, lanes: list) -> None:
-        for lane in lanes:
-            for x1, y1, x2, y2 in lane:
-                cv2.line(frame, (x1, y1), (x2, y2), (0,0,255), 2)
-                cv2.imshow("", frame)
-                cv2.waitKey()
+        return [solid_lane, dashed_lane]
+
+    def __fit_lines(self, frame: np.array, lanes: list):
+
+        solid_line_pts = np.array(lanes[0])
+        dashed_line_pts = np.array(lanes[1])
+
+        solid_line_fit = np.polyfit(solid_line_pts[:,1], solid_line_pts[:,0], 1)
+        dashed_line_fit = np.polyfit(dashed_line_pts[:,1], dashed_line_pts[:,0], 1)
+
+        x_min, y_min = np.min(solid_line_pts, axis=0)
+        x_max, y_max = np.max(solid_line_pts, axis=0)
+        x_min = int(solid_line_fit[0]*y_min + solid_line_fit[1])
+        x_max = int(solid_line_fit[0]*y_max + solid_line_fit[1])
+        cv2.line(frame, (x_min, y_min), (x_max, y_max), (0,225,0), 2)
+
+        x_min, _ = np.min(dashed_line_pts, axis=0)
+        x_max, _ = np.max(dashed_line_pts, axis=0)
+        x_min = int(dashed_line_fit[0]*y_min + dashed_line_fit[1])
+        x_max = int(dashed_line_fit[0]*y_max + dashed_line_fit[1])
+        cv2.line(frame, (x_min, y_min), (x_max, y_max), (0,0,225), 2)
+
 
     def __detect_lines(self, frame: np.array) -> np.array:
 
@@ -76,7 +99,8 @@ class LaneDetector:
         cv2.putText(frame_lanes, 'Solid', (20,20), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 0), 2, cv2.LINE_AA)
         cv2.putText(frame_lanes, 'Dashed', (20,40), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 255), 2, cv2.LINE_AA)
 
-        self.__classify_lanes(frame_lanes, lanes)
+        lanes = self.__classify_lanes(frame_lanes, lanes)
+        self.__fit_lines(frame_lanes, lanes)
 
         return frame_lanes, frame_roi
 
@@ -96,13 +120,13 @@ class LaneDetector:
 
                 if(visualize):
                     cv2.imshow("Result", result)
-                    cv2.imshow("ROI", frame_roi)
-                    cv2.waitKey(3)
+                    # cv2.imshow("ROI", frame_roi)
+                    cv2.waitKey(0)
             except Exception as e:
-                # print("Exception: ", e)
+                print("Exception: ", e)
                 pass
 
-        return result, frame_roi
+        # return result, frame_roi
 
 def main():
     Parser = argparse.ArgumentParser()

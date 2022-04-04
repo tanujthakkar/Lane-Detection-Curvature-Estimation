@@ -34,20 +34,10 @@ class CurvatureEstimator:
         hls_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HLS)
         h, l, s = cv2.split(hls_frame)
 
-        _, l_thresh = cv2.threshold(h, 120, 255, cv2.THRESH_BINARY)
-        thresh_blur = cv2.GaussianBlur(l_thresh, (5, 5), 0)
-
-        sobel_x = np.absolute(cv2.Sobel(thresh_blur, cv2.CV_32F, 1, 0, 3))
-        sobel_y = np.absolute(cv2.Sobel(thresh_blur, cv2.CV_32F, 0, 1, 3))
-        mag = np.sqrt(sobel_x**2 + sobel_y**2)
-        binary = np.ones_like(mag)
-        binary[(mag >= 110) & (mag <= 255)] = 1
-
         _, s_thresh = cv2.threshold(s, 100, 255, cv2.THRESH_BINARY)
         _, r_thresh = cv2.threshold(frame[:,:,2], 120, 255, cv2.THRESH_BINARY)
 
-        rs_binary = cv2.bitwise_and(s_thresh, r_thresh)
-        filtered_lines = cv2.bitwise_or(rs_binary, np.uint8(binary))
+        filtered_lines = cv2.bitwise_and(s_thresh, r_thresh)
 
         return filtered_lines
 
@@ -60,17 +50,12 @@ class CurvatureEstimator:
 
     def __birds_eye_view(self, frame: np.array, corners: np.array, height: int, width: int) -> np.array:
 
-        x_min, y_min = np.min(corners, axis=0)
-        x_max, y_max = np.max(corners, axis=0)
-
         corners_bev = np.array([[320, 1],
-                                [320, 680],
-                                [920, 680],
+                                [320, 980],
+                                [920, 980],
                                 [920, 1]]) # Corners of the warped birds-eye-view
         H = cv2.getPerspectiveTransform(np.float32(corners), np.float32(corners_bev))
-        H_inv = np.linalg.inv(H)
-
-        birds_eye_view = cv2.warpPerspective(frame, H, (frame.shape[1], frame.shape[0]))
+        birds_eye_view = cv2.warpPerspective(frame, H, (frame.shape[1], 1000))
 
         return birds_eye_view, H
 
@@ -84,11 +69,12 @@ class CurvatureEstimator:
         right_peak = np.argmax(histogram[midpoint:]) + midpoint
 
         if(visualize):
-            plt.figure()
-            plt.title("Histogram")
+            fig = plt.figure()
             plt.xlabel("Pixel Location")
             plt.ylabel("Pixel Count")
             plt.plot(location, histogram)
+            fig.set_size_inches(5, 4)
+            plt.savefig("hist.png", dpi=100, bbox_inches='tight')
             plt.show()
 
         return histogram, left_peak, right_peak
@@ -196,8 +182,9 @@ class CurvatureEstimator:
         curvature_diff = left_curvature - right_curvature
 
         frame_projected = self.__project_lane(frame, birds_eye_view, np.vstack((left_lane_line, np.flipud(right_lane_line))), H)
+        
         cv2.putText(frame_projected, "Left Curvature: {:.2f}".format(left_curvature), (20,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
-        cv2.putText(frame_projected, "Right Curvature: {:.2f}".format(right_curvature), (940,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame_projected, "Right Curvature: {:.2f}".format(right_curvature), (920,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
         cv2.putText(frame_projected, "Avg. Curvature: {:.2f}".format((left_curvature+right_curvature)/2), (w//2-125,30), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
 
         if(curvature_diff > 0):
@@ -208,19 +195,23 @@ class CurvatureEstimator:
             cv2.putText(frame_projected, 'Go Straight', (w//2,60), cv2.FONT_HERSHEY_SIMPLEX, .8, (0, 0, 255), 2, cv2.LINE_AA)
 
         cv2.putText(frame, 'Frame', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
-        frame = cv2.resize(frame, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        frame = cv2.resize(frame, None, fx=0.4, fy=0.4, interpolation=cv2.INTER_CUBIC)
+
         frame_filtered = cv2.putText(convert_three_channel(frame_filtered), 'Lane Filtering', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
-        frame_filtered = cv2.resize(frame_filtered, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        frame_filtered = cv2.resize(frame_filtered, None, fx=0.4, fy=0.4, interpolation=cv2.INTER_CUBIC)
+        
         birds_eye_view = cv2.putText(convert_three_channel(birds_eye_view), 'Birds Eye View', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
-        birds_eye_view = cv2.resize(birds_eye_view, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
+        birds_eye_view = cv2.resize(birds_eye_view, None, fx=0.4, fy=0.432, interpolation=cv2.INTER_CUBIC)
+        
         cv2.putText(frame_lane_lines, 'Curvature Estimation', (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,0,0), 2, cv2.LINE_AA)
-        frame_lane_lines = cv2.resize(frame_lane_lines, None, fx=0.35, fy=0.35, interpolation=cv2.INTER_CUBIC)
-        frame_projected = cv2.resize(frame_projected, None, fx=0.7, fy=0.7, interpolation=cv2.INTER_CUBIC)
+        frame_lane_lines = cv2.resize(frame_lane_lines, None, fx=0.4, fy=0.432, interpolation=cv2.INTER_CUBIC)
+        # frame_projected = cv2.resize(frame_projected, None, fx=0.7, fy=0.7, interpolation=cv2.INTER_CUBIC)
 
         top_row = np.hstack((frame, frame_filtered))
         bottom_row = np.hstack((birds_eye_view, frame_lane_lines))
         pipeline = np.vstack((top_row, bottom_row))
         result = np.hstack((frame_projected, pipeline))
+        result = cv2.resize(result, None, fx=0.8, fy=0.8, interpolation=cv2.INTER_CUBIC)
 
         # cv2.imshow("Frame", frame_projected)
         # cv2.imshow("Lane", temp)

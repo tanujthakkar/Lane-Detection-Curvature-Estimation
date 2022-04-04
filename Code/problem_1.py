@@ -30,15 +30,6 @@ class HistogramEqulization:
         self.output = None
 
     def __compute_histogram(self, img: np.array, clip: int = 0) -> np.array:
-        '''
-            Compute the histogram of an image
-
-            Input(s):
-            img: Input image
-
-            Output(s):
-            histogram: Histogram of input image
-        '''
 
         histogram = np.zeros(256, dtype=int)
         bins = np.arange(256)
@@ -53,28 +44,17 @@ class HistogramEqulization:
         if(clip):
             histogram += (residue//256)
 
-        # plt.figure()
-        # plt.title("Grayscale Histogram")
+        # fig = plt.figure()
         # plt.xlabel("Pixel Value")
         # plt.ylabel("Pixel Count")
-        # plt.xlim([0, 255])
         # plt.plot(bins, histogram)
+        # fig.set_size_inches(5, 4)
+        # plt.savefig("hist.png", dpi=100, bbox_inches='tight')
         # plt.show()
-
-        # print(histogram)
 
         return histogram
 
     def __compute_cdf(self, histogram: np.array) -> np.array:
-        '''
-            Compute cumulative distribution function (CDF) of a histogram
-
-            Input(s):
-            histogram: Input histogram
-
-            Output(s):
-            cdf: CDF of input histogram
-        '''
 
         cdf = np.zeros(256, dtype=int)
         cdf[0] = histogram[0]
@@ -90,8 +70,6 @@ class HistogramEqulization:
         h, s, v = cv2.split(hsv_img)
         img_split = [h, s, v]
 
-        output = list()
-
         c = v
 
         histogram = self.__compute_histogram(c, clip)
@@ -106,7 +84,6 @@ class HistogramEqulization:
             channel[i] = ((cdf[pixel] - cdf_min)/((h*w) - cdf_min)) * 255
 
         channel = channel.reshape(c.shape)
-        output.append(channel)
 
         hsv_img[:,:,2] = channel
         output = cv2.cvtColor(hsv_img, cv2.COLOR_HSV2BGR)

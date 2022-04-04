@@ -133,6 +133,7 @@ class LaneDetector:
                     video_writer.write(result)
 
                 if(visualize):
+                    # cv2.imshow("Frame", frame)
                     cv2.imshow("Result", result)
                     cv2.waitKey(3)
             except Exception as e:

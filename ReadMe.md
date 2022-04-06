@@ -30,12 +30,12 @@ Instructions -
 
 		--DataDir: Path to data directory
 		--ResultDir: Path to results directory
-		--CLAHE: Toggle CLAHE
+		--AHE: Toggle Adaptive Histogram Equalization
 		--Visualize: Toggle visualization
 
 3. To run the code for problem 1: Adaptive Histogram Equalization, use the following command -
 
-		python problem_1.py --Visualize --CLAHE
+		python problem_1.py --Visualize --AHE
 
 4. To run the code for problem 2, use the following command -
 
@@ -58,7 +58,7 @@ Instructions -
 6. Here are the links to the videos generated for questions 2a and 2b,
 	
 	1a. Histogram Equalization - https://drive.google.com/drive/folders/1fGqqQomtB9VWh9KOSRSx6lEkmVLo1enS
-	1b. Adaptive Histogram Equalization - https://drive.google.com/drive/folders/1bqhSjCeslBvZFaTFr667F8fkA67Cd42a
+	1b. Adaptive Histogram Equalization - https://drive.google.com/drive/folders/1-RvlqZ7zyyRIWiX3tw12CeG3zawjxrpj
 	2. Lane Detection - https://drive.google.com/file/d/1l0tcD-ZyBv96EO-qwFRYmlbIY36eMyA9/view
 	3. Curvature Estimation - https://drive.google.com/file/d/1BQQLsum4ozc2-ML-vrIp23pra-GXthHK/view
 

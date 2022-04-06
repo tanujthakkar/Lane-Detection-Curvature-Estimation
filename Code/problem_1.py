@@ -37,7 +37,7 @@ class HistogramEqulization:
 
         for i in img.flatten():
             if(clip > 0 and histogram[i] >= clip):
-                    residue += 1
+                residue += 1
             else:
                 histogram[i] += 1
 
@@ -81,7 +81,10 @@ class HistogramEqulization:
         h, w = c.shape
 
         for i, pixel in enumerate(c.flatten()):
-            channel[i] = ((cdf[pixel] - cdf_min)/((h*w) - cdf_min)) * 255
+            if((cdf[pixel] - cdf_min) > 0 and ((h*w) - cdf_min) > 0):
+                channel[i] = ((cdf[pixel] - cdf_min)/((h*w) - cdf_min)) * 255
+            else:
+                channel[i] = pixel
 
         channel = channel.reshape(c.shape)
 
@@ -103,14 +106,14 @@ class HistogramEqulization:
         return self.output
 
 
-def hist_equalize_img(img_path: str, clahe: bool = False, visualize: bool = False) -> np.array:
+def hist_equalize_img(img_path: str, ahe: bool = False, visualize: bool = False) -> np.array:
 
     img = cv2.imread(img_path)
     HE = HistogramEqulization(img)
-    if(not clahe):
+    if(not ahe):
         output = HE.equalize(img)
     else:
-        output = HE.adaptive_equalize(img, clip=10)
+        output = HE.adaptive_equalize(img, clip=0)
     
     if(visualize):
         cv2.imshow("Histogram Equlization", np.vstack((img, output)))
@@ -118,12 +121,12 @@ def hist_equalize_img(img_path: str, clahe: bool = False, visualize: bool = Fals
 
     return output
 
-def hist_equalize_data(data_dir: str, result_dir: str, clahe: bool = False, visualize: bool = False) -> None:
+def hist_equalize_data(data_dir: str, result_dir: str, ahe: bool = False, visualize: bool = False) -> None:
 
     img_set = read_image_set(data_dir)
 
-    if(clahe):
-        result_dir = os.path.join(result_dir, data_dir.split('/')[-2] + '_processed_CLAHE')
+    if(ahe):
+        result_dir = os.path.join(result_dir, data_dir.split('/')[-2] + '_processed_AHE')
     else:
         result_dir = os.path.join(result_dir, data_dir.split('/')[-2] + '_processed')
     if(not os.path.exists(result_dir)):
@@ -131,7 +134,7 @@ def hist_equalize_data(data_dir: str, result_dir: str, clahe: bool = False, visu
 
     for img in img_set:
         output_file = img.split('/')[-1].split('.')[0] + '.png'
-        output = hist_equalize_img(img, clahe, visualize)
+        output = hist_equalize_img(img, ahe, visualize)
         cv2.imwrite(os.path.join(result_dir, output_file), output)
 
 def main():
@@ -139,20 +142,20 @@ def main():
     Parser.add_argument('--ImagePath', type=str, default=None, help='Path to input image')
     Parser.add_argument('--DataDir', type=str, default="../Data/adaptive_hist_data/", help='Path to data directory')
     Parser.add_argument('--ResultDir', type=str, default="../Result/", help='Path to results directory')
-    Parser.add_argument('--CLAHE', action='store_true', help='Toggle CLAHE')
+    Parser.add_argument('--AHE', action='store_true', help='Toggle Adaptive Histogram Equalization')
     Parser.add_argument('--Visualize', action='store_true', help='Toggle visualization')
     
     Args = Parser.parse_args()
     image_path = Args.ImagePath
     data_dir = Args.DataDir
     result_dir = Args.ResultDir
-    clahe = Args.CLAHE
+    ahe = Args.AHE
     visualize = Args.Visualize
 
     if(image_path):
-        hist_equalize_img(image_path, clahe, visualize)
+        hist_equalize_img(image_path, ahe, visualize)
     else:
-        hist_equalize_data(data_dir, result_dir, clahe, visualize)
+        hist_equalize_data(data_dir, result_dir, ahe, visualize)
 
 
 if __name__ == '__main__':
